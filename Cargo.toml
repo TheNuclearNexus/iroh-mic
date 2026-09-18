@@ -36,3 +36,8 @@ debug = false
 lto = true
 opt-level = "z"
 panic = "abort"
+
+# wasm-pack's bundled wasm-opt rejects the wasm produced by current Rust
+# releases, so leave the (already small) release wasm unoptimized.
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
