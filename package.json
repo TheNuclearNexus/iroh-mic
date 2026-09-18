@@ -1,0 +1,12 @@
+{
+  "name": "iroh-mic",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Static webapp that streams microphone audio between peers over iroh",
+  "type": "module",
+  "scripts": {
+    "build": "./scripts/build-wasm.sh --dev",
+    "build:release": "./scripts/build-wasm.sh --release",
+    "serve": "node scripts/serve.mjs"
+  }
+}

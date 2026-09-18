@@ -1,0 +1,38 @@
+[package]
+name = "iroh-mic"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+anyhow = "1.0.86"
+async-channel = "2.3.1"
+bytes = "1.11"
+console_error_panic_hook = "0.1.7"
+iroh = { version = "1.2.0", default-features = false, features = ["tls-ring"] }
+js-sys = "0.3"
+n0-future = "0.3"
+serde = { version = "1.0.217", features = ["derive"] }
+serde-wasm-bindgen = "0.6.5"
+tokio = { version = "1.44", default-features = false, features = ["sync", "io-util"] }
+tokio-stream = { version = "0.1.17", default-features = false, features = ["sync"] }
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+tracing-subscriber-wasm = "0.1.0"
+wasm-bindgen = "=0.2.128"
+wasm-bindgen-futures = "0.4.50"
+wasm-streams = "0.5"
+
+# Force the wasm_js backend on the getrandom 0.3 generation used by transitive
+# deps; without this, random number generation panics at runtime in the browser.
+getrandom = { version = "0.3", features = ["wasm_js"] }
+
+[profile.release]
+codegen-units = 1
+strip = "symbols"
+debug = false
+lto = true
+opt-level = "z"
+panic = "abort"

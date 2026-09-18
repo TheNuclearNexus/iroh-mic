@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>iroh-mic — mic streaming over iroh</title>
+    <script src="./main.js" type="module"></script>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>iroh-mic</h1>
+      <p>
+        Static webapp that dials peers <em>by public key</em> with
+        <a href="https://iroh.computer" target="_blank" rel="noreferrer">iroh</a>
+        and streams a live microphone feed from one browser to another. No
+        backend, no signaling server — only iroh's discovery and relay.
+      </p>
+    </header>
+
+    <main>
+      <section class="card">
+        <h2>1. Your endpoint id</h2>
+        <p class="hint">
+          Share this with the other device, or open a second tab and paste it there.
+        </p>
+        <div class="row">
+          <code id="endpoint-id">…</code>
+          <button id="copy-btn" type="button">copy</button>
+        </div>
+        <p class="hint">
+          Or send this page's link with the id pre-filled:
+          <a id="connect-link" href="?connect=">open connect link</a>
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>2. Start your audio</h2>
+        <p class="hint">
+          Use a real microphone, or generate a 440 Hz test tone to verify the
+          pipeline without any device permission.
+        </p>
+        <div class="row">
+          <button id="mic-btn" type="button">start microphone</button>
+          <button id="tone-btn" type="button">start test tone</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>3. Connect to a peer</h2>
+        <form id="connect-form" class="row">
+          <input
+            id="connect-id"
+            name="peer"
+            placeholder="peer endpoint id"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button type="submit">connect &amp; send</button>
+        </form>
+        <p class="hint">Connected peers (audio is played automatically):</p>
+        <div id="peer-list">none</div>
+      </section>
+
+      <section class="card">
+        <h2>Telemetry</h2>
+        <table>
+          <tbody>
+            <tr><th>state</th><td id="state">-</td></tr>
+            <tr><th>peers</th><td id="peers">0</td></tr>
+            <tr><th>frames sent</th><td id="frames-sent">0</td></tr>
+            <tr><th>frames received</th><td id="frames-received">0</td></tr>
+            <tr><th>bytes sent</th><td id="bytes-sent">0</td></tr>
+            <tr><th>bytes received</th><td id="bytes-received">0</td></tr>
+            <tr><th>input level (dBFS)</th><td id="input-db">-inf</td></tr>
+            <tr><th>output level (dBFS)</th><td id="output-db">-inf</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>Log</h2>
+        <div id="log" class="log"></div>
+      </section>
+    </main>
+  </body>
+</html>
