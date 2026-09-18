@@ -105,6 +105,19 @@ Open the page on two real devices (or two tabs with a real mic), connect by
 endpoint id, and confirm audio is audible on the receiver. Headphones avoid
 feedback on a single machine.
 
+## Troubleshooting
+
+* **404 at `https://thenuclearnexus.github.io/`** — the account root is served by
+the `TheNuclearNexus.github.io` user-site repo, which redirects to
+`/iroh-mic/`. The app itself always lives at
+`https://thenuclearnexus.github.io/iroh-mic/`.
+* **`favicon.ico` 404 in the console** — fixed by an inline SVG icon in
+`index.html`; browsers no longer request `/favicon.ico`.
+* **Connect fails** — the peer must have the page open and the endpoint id must
+be exactly 64 hex characters. The UI now validates the id and shows the
+underlying error (for example a discovery `404` when the peer is offline or
+its record has expired).
+
 ## Recorded evidence
 
 Run date: 2026-09-18, Chrome 153.0.8010.36 (headless), macOS arm64,
