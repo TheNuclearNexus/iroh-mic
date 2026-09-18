@@ -63,6 +63,13 @@ main {
   margin: 0.35rem 0;
 }
 
+.error {
+  color: var(--error);
+  font-size: 0.9rem;
+  margin: 0.5rem 0;
+  overflow-wrap: anywhere;
+}
+
 .row {
   display: flex;
   flex-wrap: wrap;

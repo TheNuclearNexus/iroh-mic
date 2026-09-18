@@ -3,6 +3,7 @@ import init, { MicNode } from "./wasm/iroh_mic.js";
 const SAMPLE_RATE = 48000;
 const FRAME_SAMPLES = 480; // 10 ms at 48 kHz
 const MAX_QUEUED_FRAMES = 20; // ~200 ms of backlog before we drop oldest
+const ENDPOINT_ID_RE = /^[0-9a-fA-F]{64}$/;
 
 const telemetry = {
   state: "booting",
@@ -131,16 +132,44 @@ async function startAudio(mode) {
   }
 }
 
-async function connectToPeer(endpointId) {
-  if (!endpointId) return;
+async function connectToPeer(rawEndpointId) {
+  const endpointId = (rawEndpointId ?? "").replace(/\s+/g, "");
+  if (!endpointId) {
+    showConnectError("Paste the other device's endpoint id first.");
+    return;
+  }
+  if (!ENDPOINT_ID_RE.test(endpointId)) {
+    showConnectError(
+      `That does not look like an endpoint id: expected 64 hex characters, got ${endpointId.length}.`,
+    );
+    log("invalid endpoint id", "error");
+    return;
+  }
+  if (!node) {
+    showConnectError("The app is still starting up; try again in a moment.");
+    return;
+  }
+  showConnectError("");
   log(`dialing ${endpointId} …`);
   try {
     await node.connect(endpointId);
     activePeer = endpointId;
     log(`connected to ${endpointId}`, "ok");
   } catch (err) {
-    log(`connect failed: ${err}`, "error");
+    const message = String(err);
+    showConnectError(
+      `Could not connect to ${endpointId.slice(0, 8)}…: ${message}. ` +
+        "Make sure the page is open on the other device and the id is exact.",
+    );
+    log(`connect failed: ${message}`, "error");
   }
+}
+
+function showConnectError(message) {
+  const el = $("#connect-error");
+  if (!el) return;
+  el.textContent = message ?? "";
+  el.hidden = !message;
 }
 
 function handleEvent(event) {
@@ -237,7 +266,7 @@ async function main() {
   $("#tone-btn").onclick = () => startAudio("tone").catch((err) => log(`audio error: ${err}`, "error"));
   $("#connect-form").onsubmit = (event) => {
     event.preventDefault();
-    connectToPeer($("#connect-id").value.trim());
+    connectToPeer($("#connect-id").value);
   };
 
   consumeEvents();
