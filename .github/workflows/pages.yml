@@ -24,9 +24,9 @@ jobs:
         run: rustup target add wasm32-unknown-unknown
 
       - name: Install wasm-pack
-        uses: jetli/wasm-pack-action@v0.4.0
+        uses: taiki-e/install-action@v2
         with:
-          version: v0.13.1
+          tool: wasm-pack@0.13.1
 
       - name: Build wasm and static site
         run: ./scripts/build-wasm.sh --release
