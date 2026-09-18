@@ -1,5 +1,39 @@
 import init, { MicNode } from "./wasm/iroh_mic.js";
 
+// iOS has no devtools, so capture iroh's own console logs (tracing goes to the
+// console) and surface them in the diagnostics report. Keeps relay/connection
+// messages and drops the QUIC trace spam.
+const consoleBuffer = [];
+const CONSOLE_NOISE =
+  /noq_proto|transmit|wrote packet|packet size|datagram|stream=|PATH_ACK|space=|nothing to send|clipped|net_report|reportgen|run-probe|delaying probe|probe\b/i;
+const CONSOLE_INTERESTING =
+  /dial|connect|fail|error|close|handshake|relay client|home relay|websocket|pkarr|online/i;
+function captureConsole(level, args) {
+  const text = args
+    .map((a) => {
+      if (typeof a === "string") return a;
+      if (a instanceof Error) return a.message;
+      try {
+        return JSON.stringify(a);
+      } catch {
+        return String(a);
+      }
+    })
+    .join(" ");
+  if (!text) return;
+  const isError = level === "error" || level === "warn";
+  if (!isError && !(CONSOLE_INTERESTING.test(text) && !CONSOLE_NOISE.test(text))) return;
+  consoleBuffer.push(`[${level}] ${text}`.slice(0, 400));
+  while (consoleBuffer.length > 80) consoleBuffer.shift();
+}
+for (const level of ["error", "warn", "info", "log", "debug"]) {
+  const original = console[level].bind(console);
+  console[level] = (...args) => {
+    captureConsole(level, args);
+    original(...args);
+  };
+}
+
 const SAMPLE_RATE = 48000;
 const FRAME_SAMPLES = 480; // 10 ms at 48 kHz
 const MAX_QUEUED_FRAMES = 20; // ~200 ms of backlog before we drop oldest
@@ -436,6 +470,13 @@ async function runDiagnostics() {
   lines.push("");
   lines.push(`dns.iroh.link: ${await httpProbe("https://dns.iroh.link/")}`);
   lines.push(`general https: ${await reachableProbe("https://www.google.com/generate_204")}`);
+  lines.push("");
+  const recheck = node ? node.relay_status() : [];
+  lines.push(
+    `iroh relay session (rechecked): ${recheck.length ? recheck.join("; ") : "(none reported)"}`,
+  );
+  lines.push("", "recent console (errors/warnings/network):");
+  lines.push(consoleBuffer.length ? consoleBuffer.map((l) => `  ${l}`).join("\n") : "  (none)");
   const text = lines.join("\n");
   if (out) out.textContent = text;
   log("diagnostics complete", "ok");
