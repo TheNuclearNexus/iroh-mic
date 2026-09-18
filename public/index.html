@@ -61,8 +61,13 @@
             spellcheck="false"
           />
           <button type="submit">connect &amp; send</button>
+          <button id="disconnect-btn" type="button" class="secondary">disconnect</button>
         </form>
         <p id="connect-error" class="error" hidden></p>
+        <p class="hint">
+          Connections resume automatically when you come back to this tab; the
+          endpoint id is stable for this tab so the peer can reconnect too.
+        </p>
         <p class="hint">Connected peers (audio is played automatically):</p>
         <div id="peer-list">none</div>
       </section>

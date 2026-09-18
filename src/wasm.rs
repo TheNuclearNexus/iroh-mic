@@ -32,14 +32,30 @@ pub struct MicNode(node::MicNode);
 
 #[wasm_bindgen]
 impl MicNode {
-    /// Bind a new endpoint using iroh's public relay defaults.
-    pub async fn spawn() -> Result<MicNode, JsError> {
-        Ok(MicNode(node::MicNode::spawn().await.map_err(to_js_err)?))
+    /// Bind a new endpoint using iroh's public relay defaults. Pass a 32-byte
+    /// secret key to keep the endpoint id stable across reloads, or an empty
+    /// array to generate a fresh one.
+    pub async fn spawn(secret: Vec<u8>) -> Result<MicNode, JsError> {
+        let secret = if secret.len() == 32 {
+            let mut bytes = [0u8; 32];
+            bytes.copy_from_slice(&secret);
+            Some(iroh::SecretKey::from_bytes(&bytes))
+        } else {
+            None
+        };
+        Ok(MicNode(
+            node::MicNode::spawn(secret).await.map_err(to_js_err)?,
+        ))
     }
 
     /// This node's endpoint id, shown to the user so a peer can dial it.
     pub fn endpoint_id(&self) -> String {
         self.0.local_id().to_string()
+    }
+
+    /// The 32-byte secret key for persisting this endpoint's identity.
+    pub fn secret_key(&self) -> Vec<u8> {
+        self.0.secret_key().to_vec()
     }
 
     /// Readable stream of connection lifecycle events (JSON objects).
@@ -67,6 +83,12 @@ impl MicNode {
             .send_audio(endpoint_id, data)
             .await
             .map_err(to_js_err)
+    }
+
+    /// Close a peer connection.
+    pub async fn disconnect(&self, endpoint_id: String) -> Result<(), JsError> {
+        let endpoint_id = parse_endpoint_id(&endpoint_id)?;
+        self.0.disconnect(endpoint_id).await.map_err(to_js_err)
     }
 }
 

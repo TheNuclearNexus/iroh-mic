@@ -91,6 +91,12 @@ button:hover {
   filter: brightness(1.1);
 }
 
+button.secondary {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
 input {
   flex: 1 1 24rem;
   min-width: 12rem;

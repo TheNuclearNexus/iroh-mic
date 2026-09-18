@@ -68,11 +68,16 @@ pub struct MicNode {
 
 impl MicNode {
     /// Bind an iroh endpoint and start accepting incoming audio connections.
-    pub async fn spawn() -> Result<Self> {
-        let endpoint = Endpoint::builder(iroh::endpoint::presets::N0)
-            .alpns(vec![ALPN.to_vec()])
-            .bind()
-            .await?;
+    ///
+    /// Passing a `secret` keeps the endpoint id stable across reloads, which
+    /// lets mobile browsers re-establish a suspended session under the same
+    /// address.
+    pub async fn spawn(secret: Option<iroh::SecretKey>) -> Result<Self> {
+        let mut builder = Endpoint::builder(iroh::endpoint::presets::N0);
+        if let Some(secret) = secret {
+            builder = builder.secret_key(secret);
+        }
+        let endpoint = builder.alpns(vec![ALPN.to_vec()]).bind().await?;
 
         let (audio_tx, audio_rx) = async_channel::bounded(512);
         let (events, _) = broadcast::channel(256);
@@ -102,6 +107,20 @@ impl MicNode {
     /// This node's endpoint id (the address peers dial).
     pub fn local_id(&self) -> EndpointId {
         self.router.endpoint().id()
+    }
+
+    /// The 32-byte secret key backing this endpoint, so the frontend can keep
+    /// the endpoint id stable across reloads.
+    pub fn secret_key(&self) -> [u8; 32] {
+        self.router.endpoint().secret_key().to_bytes()
+    }
+
+    /// Close a peer connection (used when the user stops reconnecting).
+    pub async fn disconnect(&self, endpoint_id: EndpointId) -> Result<()> {
+        if let Some(peer) = self.shared.peers.lock().await.remove(&endpoint_id) {
+            peer.connection.close(0u8.into(), b"disconnected");
+        }
+        Ok(())
     }
 
     /// Stream of incoming/outgoing connection lifecycle events.

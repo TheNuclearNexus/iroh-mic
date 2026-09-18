@@ -93,6 +93,24 @@ public N0 relay. Either way the application code is unchanged and still only
 dials by endpoint id. See [iroh's docs](https://iroh.computer/docs) for relay
 deployment/self-hosting options.
 
+## Mobile and background tabs
+
+Mobile browsers freeze background tabs, drop the network session, and often
+reload the page. iroh-mic is built to recover instead of pretending the
+session survives:
+
+* The endpoint key is kept in `sessionStorage`, so the endpoint id is **stable
+  across a reload in the same tab** while each tab still gets its own identity.
+* The app remembers the peers you connected to and automatically re-dials them
+  when the tab becomes visible again, when the network returns, or after a
+  reload.
+* The `AudioContext` is resumed on return, and a screen wake lock is requested
+  while streaming to reduce interruptions.
+
+Use **disconnect** to stop auto-reconnecting. A backgrounded tab can still be
+suspended by the OS; the design restores the session when you return rather
+than trying to keep it alive.
+
 ## Limitations
 
 * Audio is uncompressed 48 kHz mono PCM (~768 kbit/s per direction). That is

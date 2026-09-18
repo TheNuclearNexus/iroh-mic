@@ -4,6 +4,10 @@ const SAMPLE_RATE = 48000;
 const FRAME_SAMPLES = 480; // 10 ms at 48 kHz
 const MAX_QUEUED_FRAMES = 20; // ~200 ms of backlog before we drop oldest
 const ENDPOINT_ID_RE = /^[0-9a-fA-F]{64}$/;
+const SECRET_STORAGE_KEY = "iroh-mic:secret";
+const PEERS_STORAGE_KEY = "iroh-mic:peers";
+const RECONNECT_BASE_MS = 1500;
+const RECONNECT_MAX_MS = 15000;
 
 const telemetry = {
   state: "booting",
@@ -26,6 +30,125 @@ let playbackNode = null;
 let activePeer = null;
 const sendQueue = [];
 let pumping = false;
+
+// Peers the user asked to be connected to. Kept per tab (sessionStorage) so a
+// mobile reload keeps the same endpoint identity and reconnects automatically.
+const desiredPeers = new Set(loadDesiredPeers());
+const reconnectTimers = new Map();
+const reconnectAttempts = new Map();
+let wakeLock = null;
+
+function hexToBytes(hex) {
+  if (!/^[0-9a-fA-F]+$/.test(hex) || hex.length % 2 !== 0) return new Uint8Array(0);
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i * 2, 2), 16);
+  return out;
+}
+
+function bytesToHex(bytes) {
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function loadDesiredPeers() {
+  try {
+    const list = JSON.parse(sessionStorage.getItem(PEERS_STORAGE_KEY) ?? "[]");
+    return Array.isArray(list) ? list.filter((id) => ENDPOINT_ID_RE.test(id)) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveDesiredPeers() {
+  try {
+    sessionStorage.setItem(PEERS_STORAGE_KEY, JSON.stringify([...desiredPeers]));
+  } catch {
+    /* storage may be unavailable */
+  }
+}
+
+function markDesired(peerId) {
+  desiredPeers.add(peerId);
+  reconnectAttempts.delete(peerId);
+  saveDesiredPeers();
+}
+
+function unmarkDesired(peerId) {
+  desiredPeers.delete(peerId);
+  const timer = reconnectTimers.get(peerId);
+  if (timer) {
+    clearTimeout(timer);
+    reconnectTimers.delete(peerId);
+  }
+  reconnectAttempts.delete(peerId);
+  saveDesiredPeers();
+}
+
+function scheduleReconnect(peerId, immediate = false) {
+  if (!desiredPeers.has(peerId) || peers.has(peerId) || reconnectTimers.has(peerId)) return;
+  const attempts = reconnectAttempts.get(peerId) ?? 0;
+  const delay = immediate ? 0 : Math.min(RECONNECT_BASE_MS * 2 ** attempts, RECONNECT_MAX_MS);
+  const timer = setTimeout(() => {
+    reconnectTimers.delete(peerId);
+    reconnectPeer(peerId);
+  }, delay);
+  reconnectTimers.set(peerId, timer);
+}
+
+async function reconnectPeer(peerId) {
+  if (!desiredPeers.has(peerId) || peers.has(peerId)) return;
+  if (document.hidden) return; // handleResume retries when visible again
+  reconnectAttempts.set(peerId, (reconnectAttempts.get(peerId) ?? 0) + 1);
+  try {
+    await node.connect(peerId);
+    reconnectAttempts.delete(peerId);
+    log(`reconnected to ${peerId.slice(0, 8)}…`, "ok");
+  } catch (err) {
+    log(`reconnect to ${peerId.slice(0, 8)}… failed: ${err}`);
+    scheduleReconnect(peerId);
+  }
+}
+
+async function disconnectAll() {
+  for (const id of [...desiredPeers]) {
+    unmarkDesired(id);
+    try {
+      await node.disconnect(id);
+    } catch {
+      /* already gone */
+    }
+  }
+  log("disconnected; auto-reconnect stopped", "ok");
+}
+
+function resumeAudio() {
+  if (ctx && ctx.state === "suspended") ctx.resume().catch(() => {});
+}
+
+async function requestWakeLock() {
+  if (!ctx || !("wakeLock" in navigator) || document.hidden) return;
+  try {
+    wakeLock = await navigator.wakeLock.request("screen");
+  } catch {
+    wakeLock = null;
+  }
+}
+
+function handleResume() {
+  resumeAudio();
+  requestWakeLock();
+  for (const peerId of desiredPeers) {
+    if (!peers.has(peerId)) scheduleReconnect(peerId, true);
+  }
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) handleResume();
+});
+window.addEventListener("focus", handleResume);
+window.addEventListener("online", handleResume);
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted) handleResume();
+});
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -92,6 +215,7 @@ async function startAudio(mode) {
   await ctx.audioWorklet.addModule("./capture-worklet.js");
   await ctx.audioWorklet.addModule("./playback-worklet.js");
   await ctx.resume();
+  requestWakeLock();
 
   playbackNode = new AudioWorkletNode(ctx, "playback", { outputChannelCount: [1] });
   playbackNode.port.onmessage = (event) => {
@@ -154,6 +278,7 @@ async function connectToPeer(rawEndpointId) {
   try {
     await node.connect(endpointId);
     activePeer = endpointId;
+    markDesired(endpointId);
     log(`connected to ${endpointId}`, "ok");
   } catch (err) {
     const message = String(err);
@@ -177,11 +302,21 @@ function handleEvent(event) {
   if (event.type === "accepted" || event.type === "connected") {
     peers.set(id, event.type);
     if (!activePeer) activePeer = id;
+    const timer = reconnectTimers.get(id);
+    if (timer) {
+      clearTimeout(timer);
+      reconnectTimers.delete(id);
+    }
+    reconnectAttempts.delete(id);
     log(`${event.type}: ${id}`, "ok");
   } else if (event.type === "closed") {
     peers.delete(id);
     if (activePeer === id) activePeer = null;
     log(`closed: ${id}${event.error ? ` (${event.error})` : ""}`);
+    if (desiredPeers.has(id)) {
+      log(`connection lost; will retry ${id.slice(0, 8)}… when possible`, "error");
+      scheduleReconnect(id);
+    }
   }
   telemetry.peers = peers.size;
   renderPeers();
@@ -245,7 +380,18 @@ function renderTelemetry() {
 async function main() {
   log("initialising wasm …");
   await init();
-  node = await MicNode.spawn();
+
+  // A stable per-tab secret keeps the endpoint id across a mobile reload.
+  const savedSecret = sessionStorage.getItem(SECRET_STORAGE_KEY);
+  const secretBytes = savedSecret ? hexToBytes(savedSecret) : new Uint8Array(0);
+  node = await MicNode.spawn(secretBytes);
+  if (secretBytes.length !== 32) {
+    try {
+      sessionStorage.setItem(SECRET_STORAGE_KEY, bytesToHex(node.secret_key()));
+    } catch {
+      /* ignore */
+    }
+  }
   const endpointId = node.endpoint_id();
   $("#endpoint-id").textContent = endpointId;
   $("#connect-link").href = `?connect=${endpointId}`;
@@ -268,9 +414,21 @@ async function main() {
     event.preventDefault();
     connectToPeer($("#connect-id").value);
   };
+  $("#disconnect-btn").onclick = () => disconnectAll();
 
   consumeEvents();
   consumeAudio();
+
+  // Resume/reconnect immediately on load: mobile browsers freeze background
+  // tabs and may reload them, so this restores the session automatically.
+  handleResume();
+  const toRestore = new Set(desiredPeers);
+  if (autoConnect && ENDPOINT_ID_RE.test(autoConnect)) {
+    toRestore.delete(autoConnect);
+    connectToPeer(autoConnect);
+  }
+  for (const id of toRestore) scheduleReconnect(id, true);
+
   setInterval(renderTelemetry, 250);
   renderPeers();
   renderTelemetry();
@@ -290,6 +448,14 @@ async function main() {
     },
     start: (mode) => startAudio(mode),
     connect: (id) => connectToPeer(id),
+    disconnect: () => disconnectAll(),
+    resume: () => handleResume(),
+    get desiredPeers() {
+      return [...desiredPeers];
+    },
+    get node() {
+      return node;
+    },
   };
 }
 

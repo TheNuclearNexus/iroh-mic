@@ -99,7 +99,20 @@ To generate the WAV used by the fake-audio flag:
 node scripts/make-test-tone.mjs /tmp/iroh-mic-tone.wav
 ```
 
-## 5. Human spot check (recommended)
+## 6. Mobile resume / reconnect
+
+Mobile browsers freeze background tabs and may reload them. Verify recovery:
+
+1. Reload a connected tab. The endpoint id is unchanged and the peer connection
+   is re-established automatically: the log shows `reconnected to …`,
+   `#peers` = `1`, and the frame counters keep increasing.
+2. Force a drop from the console:
+   `await window.__irohMic.node.disconnect("<peerId>")`. The log shows
+   `connection lost; will retry …` followed by `reconnected to …`.
+3. Open two tabs: they get **different** endpoint ids (separate
+   `sessionStorage`); the same tab keeps its id across reloads.
+
+## 7. Human spot check (recommended)
 
 Open the page on two real devices (or two tabs with a real mic), connect by
 endpoint id, and confirm audio is audible on the receiver. Headphones avoid
