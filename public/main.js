@@ -324,6 +324,10 @@ const RELAY_HOSTS = [
   "aps1-1.relay.n0.iroh.link",
 ];
 
+// Non-iroh control endpoints: if these also fail, the device/network blocks
+// WebSockets; if they work, the problem is specific to the relay handshake.
+const CONTROL_WS = ["wss://echo.websocket.org", "wss://ws.postman-echo.com/raw"];
+
 function httpProbe(url, timeoutMs = 5000) {
   return new Promise((resolve) => {
     const controller = new AbortController();
@@ -343,7 +347,27 @@ function httpProbe(url, timeoutMs = 5000) {
   });
 }
 
-function wsProbe(host, timeoutMs = 5000) {
+// Reachability-only check for endpoints without CORS headers.
+function reachableProbe(url, timeoutMs = 5000) {
+  return new Promise((resolve) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      controller.abort();
+      resolve("timeout");
+    }, timeoutMs);
+    fetch(url, { signal: controller.signal, cache: "no-store", mode: "no-cors" })
+      .then(() => {
+        clearTimeout(timer);
+        resolve("reachable (opaque)");
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        resolve(String(err));
+      });
+  });
+}
+
+function wsProbe(url, protocols, timeoutMs = 6000) {
   return new Promise((resolve) => {
     let socket = null;
     let settled = false;
@@ -360,14 +384,15 @@ function wsProbe(host, timeoutMs = 5000) {
     };
     const timer = setTimeout(() => finish("timeout"), timeoutMs);
     try {
-      socket = new WebSocket(`wss://${host}/relay`, ["iroh-relay-v2", "iroh-relay-v1"]);
+      socket = protocols ? new WebSocket(url, protocols) : new WebSocket(url);
     } catch (err) {
       finish(`throw: ${err}`);
       return;
     }
     socket.binaryType = "arraybuffer";
     socket.onopen = () => finish(`open (${socket.protocol || "no subprotocol"})`);
-    socket.onerror = () => finish("error");
+    // Keep the last close code/reason: Safari often only reports via onclose.
+    socket.onerror = () => {};
     socket.onclose = (event) =>
       finish(`closed ${event.code}${event.reason ? ` ${event.reason}` : ""}`);
   });
@@ -386,21 +411,28 @@ async function runDiagnostics() {
     `endpoint id: ${node ? node.endpoint_id() : "(not ready)"}`,
     `known peers: ${[...peers.keys()].join(", ") || "(none)"}`,
     "",
-    "relay probes (host / trailing-dot host):",
+    "relay probes:",
   ];
   const relayResults = await Promise.all(
     RELAY_HOSTS.map(async (host) => {
-      const [ping, ws, wsDot] = await Promise.all([
+      const [ping, relayHttp, ws, wsV1] = await Promise.all([
         httpProbe(`https://${host}/ping`),
-        wsProbe(host),
-        wsProbe(`${host}.`),
+        reachableProbe(`https://${host}/relay`),
+        wsProbe(`wss://${host}/relay`, ["iroh-relay-v2", "iroh-relay-v1"]),
+        wsProbe(`wss://${host}/relay`, ["iroh-relay-v1"]),
       ]);
-      return `  ${host}\n    https ping: ${ping}\n    wss: ${ws}\n    wss (dot): ${wsDot}`;
+      return `  ${host}\n    https /ping: ${ping}\n    https /relay: ${relayHttp}\n    wss (v2,v1): ${ws}\n    wss (v1): ${wsV1}`;
     }),
   );
   lines.push(...relayResults);
+  lines.push("", "control websockets (non-iroh):");
+  const controlResults = await Promise.all(
+    CONTROL_WS.map(async (url) => `  ${url}: ${await wsProbe(url)}`),
+  );
+  lines.push(...controlResults);
   lines.push("");
   lines.push(`dns.iroh.link: ${await httpProbe("https://dns.iroh.link/")}`);
+  lines.push(`general https: ${await reachableProbe("https://www.google.com/generate_204")}`);
   const text = lines.join("\n");
   if (out) out.textContent = text;
   log("diagnostics complete", "ok");
