@@ -58,6 +58,11 @@ impl MicNode {
         self.0.secret_key().to_vec()
     }
 
+    /// Status of each home relay connection.
+    pub fn relay_status(&self) -> Vec<String> {
+        self.0.relay_status()
+    }
+
     /// Readable stream of connection lifecycle events (JSON objects).
     pub fn events(&self) -> JsReadableStream {
         let stream = self.0.events();

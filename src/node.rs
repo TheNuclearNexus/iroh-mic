@@ -115,6 +115,30 @@ impl MicNode {
         self.router.endpoint().secret_key().to_bytes()
     }
 
+    /// One human-readable line per home relay, including the connection state
+    /// and the most recent error. Useful for diagnosing device-specific
+    /// (e.g. iOS Safari) connection failures.
+    pub fn relay_status(&self) -> Vec<String> {
+        use iroh::Watcher;
+        let mut watcher = self.router.endpoint().home_relay_status();
+        watcher
+            .get()
+            .into_iter()
+            .map(|status| {
+                let error = status
+                    .last_error()
+                    .map(|err| err.to_string())
+                    .unwrap_or_default();
+                format!(
+                    "{} connected={} error={}",
+                    status.url(),
+                    status.is_connected(),
+                    error
+                )
+            })
+            .collect()
+    }
+
     /// Close a peer connection (used when the user stops reconnecting).
     pub async fn disconnect(&self, endpoint_id: EndpointId) -> Result<()> {
         if let Some(peer) = self.shared.peers.lock().await.remove(&endpoint_id) {

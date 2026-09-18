@@ -411,8 +411,11 @@ async function runDiagnostics() {
     `endpoint id: ${node ? node.endpoint_id() : "(not ready)"}`,
     `known peers: ${[...peers.keys()].join(", ") || "(none)"}`,
     "",
-    "relay probes:",
+    "iroh relay session:",
   ];
+  const relayStatus = node ? node.relay_status() : [];
+  lines.push(relayStatus.length ? relayStatus.map((s) => `  ${s}`).join("\n") : "  (none reported)");
+  lines.push("", "relay probes:");
   const relayResults = await Promise.all(
     RELAY_HOSTS.map(async (host) => {
       const [ping, relayHttp, ws, wsV1] = await Promise.all([
