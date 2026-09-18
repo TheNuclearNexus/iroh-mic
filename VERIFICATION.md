@@ -148,6 +148,22 @@ be exactly 64 hex characters. The UI now validates the id and shows the
 underlying error (for example a discovery `404` when the peer is offline or
 its record has expired).
 
+## 8. Diagnostics (device-specific connectivity)
+
+If one device cannot connect, run the in-app **run network test** on that
+device (or `await window.__irohMic.diagnostics()`). It reports:
+
+* secure context, WebAssembly, WebSocket availability, online state;
+* `https://<relay>/ping` for each n0 relay;
+* a raw `wss://<relay>/relay` handshake with subprotocols
+  `iroh-relay-v2`/`iroh-relay-v1`, for both `host` and `host.` (trailing dot);
+* reachability of `https://dns.iroh.link/`.
+
+Chrome baseline (2026-09, same machine): every relay returned `HTTP 200`,
+every `wss` probe opened with `iroh-relay-v2`, and `dns.iroh.link` returned
+`HTTP 200`. A failing `wss`/ping line on another device isolates the problem
+to that device's network or browser.
+
 ## Recorded evidence
 
 Run date: 2026-09-18, Chrome 153.0.8010.36 (headless), macOS arm64,

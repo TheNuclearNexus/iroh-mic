@@ -317,6 +317,96 @@ function updateAudioAlert() {
   }
 }
 
+const RELAY_HOSTS = [
+  "use1-1.relay.n0.iroh.link",
+  "usw1-1.relay.n0.iroh.link",
+  "euc1-1.relay.n0.iroh.link",
+  "aps1-1.relay.n0.iroh.link",
+];
+
+function httpProbe(url, timeoutMs = 5000) {
+  return new Promise((resolve) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      controller.abort();
+      resolve("timeout");
+    }, timeoutMs);
+    fetch(url, { signal: controller.signal, cache: "no-store", mode: "cors" })
+      .then((response) => {
+        clearTimeout(timer);
+        resolve(`HTTP ${response.status}`);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        resolve(String(err));
+      });
+  });
+}
+
+function wsProbe(host, timeoutMs = 5000) {
+  return new Promise((resolve) => {
+    let socket = null;
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try {
+        socket?.close();
+      } catch {
+        /* ignore */
+      }
+      resolve(value);
+    };
+    const timer = setTimeout(() => finish("timeout"), timeoutMs);
+    try {
+      socket = new WebSocket(`wss://${host}/relay`, ["iroh-relay-v2", "iroh-relay-v1"]);
+    } catch (err) {
+      finish(`throw: ${err}`);
+      return;
+    }
+    socket.binaryType = "arraybuffer";
+    socket.onopen = () => finish(`open (${socket.protocol || "no subprotocol"})`);
+    socket.onerror = () => finish("error");
+    socket.onclose = (event) =>
+      finish(`closed ${event.code}${event.reason ? ` ${event.reason}` : ""}`);
+  });
+}
+
+async function runDiagnostics() {
+  const out = $("#diagnostics");
+  if (out) out.textContent = "running…";
+  const lines = [
+    `time: ${new Date().toISOString()}`,
+    `user agent: ${navigator.userAgent}`,
+    `secure context: ${window.isSecureContext}`,
+    `wasm: ${typeof WebAssembly === "object"}`,
+    `websocket: ${typeof WebSocket !== "undefined"}`,
+    `online: ${navigator.onLine}`,
+    `endpoint id: ${node ? node.endpoint_id() : "(not ready)"}`,
+    `known peers: ${[...peers.keys()].join(", ") || "(none)"}`,
+    "",
+    "relay probes (host / trailing-dot host):",
+  ];
+  const relayResults = await Promise.all(
+    RELAY_HOSTS.map(async (host) => {
+      const [ping, ws, wsDot] = await Promise.all([
+        httpProbe(`https://${host}/ping`),
+        wsProbe(host),
+        wsProbe(`${host}.`),
+      ]);
+      return `  ${host}\n    https ping: ${ping}\n    wss: ${ws}\n    wss (dot): ${wsDot}`;
+    }),
+  );
+  lines.push(...relayResults);
+  lines.push("");
+  lines.push(`dns.iroh.link: ${await httpProbe("https://dns.iroh.link/")}`);
+  const text = lines.join("\n");
+  if (out) out.textContent = text;
+  log("diagnostics complete", "ok");
+  return text;
+}
+
 async function connectToPeer(rawEndpointId) {
   const endpointId = (rawEndpointId ?? "").replace(/\s+/g, "");
   if (!endpointId) {
@@ -473,6 +563,11 @@ async function main() {
   $("#mic-btn").onclick = () => startCapture("mic").catch((err) => log(`microphone error: ${err}`, "error"));
   $("#tone-btn").onclick = () => startCapture("tone").catch((err) => log(`audio error: ${err}`, "error"));
   $("#listen-btn").onclick = () => startListening().catch((err) => log(`audio error: ${err}`, "error"));
+  $("#diag-btn").onclick = () => runDiagnostics().catch((err) => log(`diagnostics failed: ${err}`, "error"));
+  $("#diag-copy-btn").onclick = () => {
+    navigator.clipboard?.writeText($("#diagnostics")?.textContent ?? "");
+    log("diagnostics copied");
+  };
   $("#connect-form").onsubmit = (event) => {
     event.preventDefault();
     connectToPeer($("#connect-id").value);
@@ -511,6 +606,7 @@ async function main() {
     },
     start: (mode) => startCapture(mode),
     listen: () => startListening(),
+    diagnostics: () => runDiagnostics(),
     connect: (id) => connectToPeer(id),
     disconnect: () => disconnectAll(),
     resume: () => handleResume(),

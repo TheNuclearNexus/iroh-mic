@@ -94,6 +94,20 @@
         <h2>Log</h2>
         <div id="log" class="log"></div>
       </section>
+
+      <section class="card">
+        <h2>Diagnostics</h2>
+        <p class="hint">
+          If a device cannot connect, run this there and share the result.
+          It tests relay reachability (WebSocket and HTTPS) and the
+          discovery endpoint.
+        </p>
+        <div class="row">
+          <button id="diag-btn" type="button" class="secondary">run network test</button>
+          <button id="diag-copy-btn" type="button" class="secondary">copy result</button>
+        </div>
+        <pre id="diagnostics" class="diag">not run</pre>
+      </section>
     </main>
   </body>
 </html>

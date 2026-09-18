@@ -127,6 +127,14 @@ Use **disconnect** to stop auto-reconnecting. A backgrounded tab can still be
 suspended by the OS; the design restores the session when you return rather
 than trying to keep it alive.
 
+## Diagnostics
+
+If one device cannot connect, open the **Diagnostics** card on that device and
+press **run network test**. It probes each iroh relay over HTTPS and WebSocket
+(with and without the trailing-dot hostname) and checks `dns.iroh.link`, which
+usually pinpoints whether the problem is the network, the browser, or the peer.
+Use **copy result** to share the output.
+
 ## Limitations
 
 * Audio is uncompressed 48 kHz mono PCM (~768 kbit/s per direction). That is

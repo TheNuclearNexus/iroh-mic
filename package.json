@@ -7,6 +7,7 @@
   "scripts": {
     "build": "./scripts/build-wasm.sh --dev",
     "build:release": "./scripts/build-wasm.sh --release",
-    "serve": "node scripts/serve.mjs"
+    "serve": "node scripts/serve.mjs",
+    "serve:lan": "BIND_ADDR=0.0.0.0 node scripts/serve.mjs"
   }
 }
