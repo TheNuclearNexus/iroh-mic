@@ -6,6 +6,8 @@ device to another. There is no backend and no signaling server: connectivity
 comes entirely from iroh's built-in discovery and relay, and the deployable
 artifact is a plain static directory (HTML/CSS/JS + WebAssembly).
 
+Live demo: <https://thenuclearnexus.github.io/iroh-mic/>
+
 ```
  browser A (sender)                     browser B (receiver)
  ┌─────────────────────┐   iroh/QUIC   ┌─────────────────────┐
