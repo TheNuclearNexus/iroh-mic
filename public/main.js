@@ -12,6 +12,7 @@ const RECONNECT_MAX_MS = 15000;
 const telemetry = {
   state: "booting",
   peers: 0,
+  playback: false,
   framesSent: 0,
   framesReceived: 0,
   bytesSent: 0,
@@ -37,6 +38,7 @@ const desiredPeers = new Set(loadDesiredPeers());
 const reconnectTimers = new Map();
 const reconnectAttempts = new Map();
 let wakeLock = null;
+let playbackPromise = null;
 
 function hexToBytes(hex) {
   if (!/^[0-9a-fA-F]+$/.test(hex) || hex.length % 2 !== 0) return new Uint8Array(0);
@@ -150,6 +152,15 @@ window.addEventListener("pageshow", (event) => {
   if (event.persisted) handleResume();
 });
 
+// Browsers only allow audio after a user gesture; use any tap to unlock it.
+window.addEventListener(
+  "pointerdown",
+  () => {
+    ensurePlayback().catch(() => {});
+  },
+  { passive: true },
+);
+
 const $ = (selector) => document.querySelector(selector);
 
 function log(message, className) {
@@ -209,20 +220,48 @@ async function pumpSender() {
   }
 }
 
-async function startAudio(mode) {
-  if (ctx) return;
-  ctx = new AudioContext({ sampleRate: SAMPLE_RATE });
-  await ctx.audioWorklet.addModule("./capture-worklet.js");
-  await ctx.audioWorklet.addModule("./playback-worklet.js");
-  await ctx.resume();
+async function ensurePlayback() {
+  if (!playbackPromise) {
+    playbackPromise = setupPlayback().catch((err) => {
+      playbackPromise = null;
+      throw err;
+    });
+  }
+  return playbackPromise;
+}
+
+async function setupPlayback() {
+  if (!ctx) {
+    ctx = new AudioContext({ sampleRate: SAMPLE_RATE });
+    await ctx.audioWorklet.addModule("./playback-worklet.js");
+  }
+  if (!playbackNode) {
+    playbackNode = new AudioWorkletNode(ctx, "playback", { outputChannelCount: [1] });
+    playbackNode.port.onmessage = (event) => {
+      telemetry.outputRms = event.data.rms;
+    };
+    playbackNode.connect(ctx.destination);
+  }
+  if (ctx.state === "suspended") {
+    await ctx.resume().catch(() => {});
+  }
+  telemetry.playback = ctx.state === "running";
   requestWakeLock();
+  updateAudioAlert();
+  return telemetry.playback;
+}
 
-  playbackNode = new AudioWorkletNode(ctx, "playback", { outputChannelCount: [1] });
-  playbackNode.port.onmessage = (event) => {
-    telemetry.outputRms = event.data.rms;
-  };
-  playbackNode.connect(ctx.destination);
+async function startListening() {
+  const running = await ensurePlayback();
+  if (running && !captureNode) telemetry.state = "listening";
+  log(running ? "playback enabled" : "playback still blocked; tap the page", running ? "ok" : "error");
+  updateAudioAlert();
+}
 
+async function startCapture(mode) {
+  await ensurePlayback();
+  if (captureNode) return;
+  await ctx.audioWorklet.addModule("./capture-worklet.js");
   captureNode = new AudioWorkletNode(ctx, "capture");
   captureNode.port.onmessage = (event) => onCaptureFrame(event.data);
 
@@ -253,6 +292,28 @@ async function startAudio(mode) {
     ctx.createMediaStreamSource(stream).connect(captureNode);
     telemetry.state = "capturing (microphone)";
     log("capturing microphone input");
+  }
+  updateAudioAlert();
+}
+
+function updateAudioAlert() {
+  const el = $("#audio-alert");
+  if (!el) return;
+  const running = !!ctx && ctx.state === "running";
+  if (running) {
+    el.hidden = true;
+    return;
+  }
+  el.hidden = false;
+  if (telemetry.framesReceived > 0) {
+    el.innerHTML =
+      "<b>Playing muted:</b> audio is arriving but this device has not enabled playback. " +
+      "Tap anywhere on the page (or press listen) to unmute. On iPhone, also check the " +
+      "side mute switch and the volume.";
+  } else {
+    el.innerHTML =
+      "Audio plays only after a tap on this device. Press <b>listen</b> to hear the other side " +
+      "(or start microphone/test tone to send as well).";
   }
 }
 
@@ -375,6 +436,7 @@ function renderTelemetry() {
   $("#output-db").textContent = Number.isFinite(telemetry.outputDb)
     ? telemetry.outputDb.toFixed(1)
     : "-inf";
+  updateAudioAlert();
 }
 
 async function main() {
@@ -408,8 +470,9 @@ async function main() {
     navigator.clipboard?.writeText(endpointId);
     log("endpoint id copied");
   };
-  $("#mic-btn").onclick = () => startAudio("mic").catch((err) => log(`microphone error: ${err}`, "error"));
-  $("#tone-btn").onclick = () => startAudio("tone").catch((err) => log(`audio error: ${err}`, "error"));
+  $("#mic-btn").onclick = () => startCapture("mic").catch((err) => log(`microphone error: ${err}`, "error"));
+  $("#tone-btn").onclick = () => startCapture("tone").catch((err) => log(`audio error: ${err}`, "error"));
+  $("#listen-btn").onclick = () => startListening().catch((err) => log(`audio error: ${err}`, "error"));
   $("#connect-form").onsubmit = (event) => {
     event.preventDefault();
     connectToPeer($("#connect-id").value);
@@ -446,7 +509,8 @@ async function main() {
     get activePeer() {
       return activePeer;
     },
-    start: (mode) => startAudio(mode),
+    start: (mode) => startCapture(mode),
+    listen: () => startListening(),
     connect: (id) => connectToPeer(id),
     disconnect: () => disconnectAll(),
     resume: () => handleResume(),

@@ -93,6 +93,22 @@ public N0 relay. Either way the application code is unchanged and still only
 dials by endpoint id. See [iroh's docs](https://iroh.computer/docs) for relay
 deployment/self-hosting options.
 
+## Hearing the other side
+
+Browsers only start audio after a **user gesture** on that device. On the
+receiving device:
+
+* press **listen** (no microphone permission needed) or **start microphone** /
+  **start test tone**, or simply tap anywhere on the page;
+* if audio is arriving but the device has not enabled playback, a yellow
+  **Playing muted** banner appears;
+* on iPhone also check the side mute switch and the volume (Web Audio can be
+  silenced by the hardware mute switch).
+
+The telemetry panel shows `output level (dBFS)`: `-inf` means nothing is being
+rendered to the audio output on this device, while a value near `-17` means
+audio is playing.
+
 ## Mobile and background tabs
 
 Mobile browsers freeze background tabs, drop the network session, and often

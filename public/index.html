@@ -23,6 +23,7 @@
     </header>
 
     <main>
+      <p id="audio-alert" class="alert" hidden></p>
       <section class="card">
         <h2>1. Your endpoint id</h2>
         <p class="hint">
@@ -41,10 +42,11 @@
       <section class="card">
         <h2>2. Start your audio</h2>
         <p class="hint">
-          Use a real microphone, or generate a 440 Hz test tone to verify the
-          pipeline without any device permission.
+          Put on headphones. To hear the other side, press <b>listen</b>. To send
+          your own audio, use the microphone or generate a 440 Hz test tone.
         </p>
         <div class="row">
+          <button id="listen-btn" type="button">listen</button>
           <button id="mic-btn" type="button">start microphone</button>
           <button id="tone-btn" type="button">start test tone</button>
         </div>

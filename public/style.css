@@ -70,6 +70,20 @@ main {
   overflow-wrap: anywhere;
 }
 
+.alert {
+  background: #3d2b00;
+  border: 1px solid #9e6a03;
+  color: #f0d58c;
+  border-radius: 8px;
+  padding: 0.7rem 1rem;
+  margin: 0;
+  font-size: 0.92rem;
+}
+
+.alert b {
+  color: #ffd97d;
+}
+
 .row {
   display: flex;
   flex-wrap: wrap;

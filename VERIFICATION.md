@@ -99,6 +99,23 @@ To generate the WAV used by the fake-audio flag:
 node scripts/make-test-tone.mjs /tmp/iroh-mic-tone.wav
 ```
 
+## 5. Playback gating (why a receiver may be silent)
+
+Browsers only start audio after a user gesture on that device. `framesReceived`
+increases even when nothing is audible, so a receiver that never enabled audio
+sees data flowing but hears nothing.
+
+* Symptom: `frames received` > 0, `#output-db` = `-inf`, `#state` = `idle`.
+* Fix: on the receiving device press **listen** (no mic permission needed), or
+  start mic/test tone, or tap anywhere on the page. A yellow **Playing muted**
+banner appears automatically while audio arrives without playback.
+* After enabling, `#output-db` becomes non-silent (≈ `-17`) and the banner
+  disappears. On iPhone also check the side mute switch and volume.
+
+Verified: a receiver with `framesReceived=1426`, `outputDb=-inf` showed the
+`Playing muted` banner; pressing **listen** switched it to `outputDb≈-16.9`
+with the banner cleared, and tapping any button also enabled playback.
+
 ## 6. Mobile resume / reconnect
 
 Mobile browsers freeze background tabs and may reload them. Verify recovery:
