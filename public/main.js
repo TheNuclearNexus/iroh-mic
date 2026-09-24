@@ -313,13 +313,16 @@ async function refreshOutputDevices() {
   }
   select.disabled = !outputSelectionSupported() || outputs.length === 0;
 
+  const named = outputs.some((device) => device.label);
   if (note) {
     if (!outputSelectionSupported()) {
       note.textContent =
         "Choosing an output device needs Chrome or Edge; Safari and Firefox do not expose it.";
-    } else if (outputs.length <= 1 && outputs.every((device) => !device.label)) {
+    } else if (!named) {
       note.textContent =
-        "Device names appear after you grant microphone access once (press start microphone).";
+        typeof navigator.mediaDevices.selectAudioOutput === "function"
+          ? "The browser hides output names until you pick one. Press choose… to select your speaker or headset."
+          : "The browser hides output names until you grant media access. Press choose… (or start microphone) once to reveal them.";
     } else {
       note.textContent = "";
     }
@@ -331,7 +334,13 @@ async function applyOutputDevice() {
   try {
     await ctx.setSinkId(outputDeviceId || "");
     const select = $("#output-device");
-    if (select && outputDeviceId && select.value !== outputDeviceId) {
+    if (select && outputDeviceId) {
+      if (![...select.options].some((option) => option.value === outputDeviceId)) {
+        const option = document.createElement("option");
+        option.value = outputDeviceId;
+        option.textContent = `Output ${select.options.length + 1}`;
+        select.appendChild(option);
+      }
       select.value = outputDeviceId;
     }
     const label =
@@ -342,6 +351,35 @@ async function applyOutputDevice() {
     log(`could not set output device: ${err}`, "error");
     return false;
   }
+}
+
+/// Chrome/Edge expose a native output picker that needs no microphone access.
+async function chooseOutputDevice() {
+  if (!navigator.mediaDevices) return;
+  if (typeof navigator.mediaDevices.selectAudioOutput === "function") {
+    try {
+      const device = await navigator.mediaDevices.selectAudioOutput();
+      outputDeviceId = device.deviceId;
+      await refreshOutputDevices();
+      await applyOutputDevice();
+      return;
+    } catch (err) {
+      log(`output picker dismissed: ${err}`);
+      return;
+    }
+  }
+  await revealOutputLabels();
+}
+
+async function revealOutputLabels() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach((track) => track.stop());
+  } catch (err) {
+    log(`microphone permission needed to list outputs: ${err}`, "error");
+    return;
+  }
+  await refreshOutputDevices();
 }
 
 async function setupPlayback() {
@@ -730,6 +768,7 @@ async function main() {
     outputDeviceId = event.target.value;
     applyOutputDevice();
   };
+  $("#output-choose").onclick = () => chooseOutputDevice();
   $("#output-refresh").onclick = () => refreshOutputDevices();
   navigator.mediaDevices?.addEventListener?.("devicechange", () => refreshOutputDevices());
   refreshOutputDevices();
@@ -777,6 +816,7 @@ async function main() {
       outputDeviceId = id ?? "";
       return applyOutputDevice();
     },
+    chooseOutputDevice: () => chooseOutputDevice(),
     get sinkId() {
       return ctx?.sinkId ?? null;
     },
