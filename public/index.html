@@ -14,106 +14,108 @@
   <body>
     <header>
       <h1>iroh-mic</h1>
-      <p>
-        Static webapp that dials peers <em>by public key</em> with
-        <a href="https://iroh.computer" target="_blank" rel="noreferrer">iroh</a>
-        and streams a live microphone feed from one browser to another. No
-        backend, no signaling server — only iroh's discovery and relay.
+      <p class="sub">
+        Microphone streaming between browsers, dialed by public key over
+        <a href="https://iroh.computer" target="_blank" rel="noreferrer">iroh</a>.
+        Static, no backend.
       </p>
     </header>
 
     <main>
       <p id="audio-alert" class="alert" hidden></p>
-      <section class="card">
-        <h2>1. Your endpoint id</h2>
-        <p class="hint">
-          Share this with the other device, or open a second tab and paste it there.
-        </p>
-        <div class="row">
-          <code id="endpoint-id">…</code>
-          <button id="copy-btn" type="button">copy</button>
-        </div>
-        <p class="hint">
-          Or send this page's link with the id pre-filled:
-          <a id="connect-link" href="?connect=" target="_blank" rel="noreferrer">open connect link</a>
-        </p>
+
+      <div class="grid">
+        <section class="card">
+          <h2>Connect</h2>
+
+          <div class="field">
+            <label for="endpoint-id">Your endpoint id</label>
+            <div class="row">
+              <code id="endpoint-id">…</code>
+              <button id="copy-btn" class="ghost" type="button">copy</button>
+            </div>
+            <a id="connect-link" class="mini" href="?connect=" target="_blank" rel="noreferrer">
+              open connect link ↗
+            </a>
+          </div>
+
+          <form id="connect-form" class="field">
+            <label for="connect-id">Peer endpoint id</label>
+            <div class="row">
+              <input
+                id="connect-id"
+                name="peer"
+                placeholder="paste 64-character id"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <button type="submit">connect</button>
+              <button id="disconnect-btn" class="ghost" type="button">stop</button>
+            </div>
+          </form>
+
+          <p id="connect-error" class="error" hidden></p>
+
+          <div class="field">
+            <label>Connected peers</label>
+            <div id="peer-list" class="peers">none</div>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Audio</h2>
+
+          <div class="field">
+            <label>This device</label>
+            <div class="row">
+              <button id="listen-btn" type="button">listen</button>
+              <button id="mic-btn" type="button">microphone</button>
+              <button id="tone-btn" class="ghost" type="button">test tone</button>
+            </div>
+            <p class="hint">
+              <b>listen</b> plays the other side (no mic permission). Start the
+              microphone or test tone to send as well.
+            </p>
+          </div>
+
+          <div class="field">
+            <label for="output-device">Output device</label>
+            <div class="row">
+              <select id="output-device"></select>
+              <button id="output-refresh" class="ghost" type="button">refresh</button>
+            </div>
+            <p id="output-note" class="hint"></p>
+          </div>
+        </section>
+      </div>
+
+      <section class="card stats">
+        <div class="stat"><span class="k">state</span><span id="state">-</span></div>
+        <div class="stat"><span class="k">peers</span><span id="peers">0</span></div>
+        <div class="stat"><span class="k">sent</span><span id="frames-sent">0</span><span class="u">frames</span></div>
+        <div class="stat"><span class="k">received</span><span id="frames-received">0</span><span class="u">frames</span></div>
+        <div class="stat"><span class="k">out</span><span id="bytes-sent">0</span><span class="u">bytes</span></div>
+        <div class="stat"><span class="k">in</span><span id="bytes-received">0</span><span class="u">bytes</span></div>
+        <div class="stat"><span class="k">input</span><span id="input-db">-inf</span><span class="u">dBFS</span></div>
+        <div class="stat"><span class="k">output</span><span id="output-db">-inf</span><span class="u">dBFS</span></div>
       </section>
 
-      <section class="card">
-        <h2>2. Start your audio</h2>
-        <p class="hint">
-          Put on headphones. To hear the other side, press <b>listen</b>. To send
-          your own audio, use the microphone or generate a 440 Hz test tone.
-        </p>
-        <div class="row">
-          <button id="listen-btn" type="button">listen</button>
-          <button id="mic-btn" type="button">start microphone</button>
-          <button id="tone-btn" type="button">start test tone</button>
-        </div>
-        <div class="row">
-          <label for="output-device">output device</label>
-          <select id="output-device"></select>
-          <button id="output-refresh" type="button" class="secondary">refresh</button>
-        </div>
-        <p id="output-note" class="hint"></p>
-      </section>
-
-      <section class="card">
-        <h2>3. Connect to a peer</h2>
-        <form id="connect-form" class="row">
-          <input
-            id="connect-id"
-            name="peer"
-            placeholder="peer endpoint id"
-            autocomplete="off"
-            spellcheck="false"
-          />
-          <button type="submit">connect &amp; send</button>
-          <button id="disconnect-btn" type="button" class="secondary">disconnect</button>
-        </form>
-        <p id="connect-error" class="error" hidden></p>
-        <p class="hint">
-          Connections resume automatically when you come back to this tab; the
-          endpoint id is stable for this tab so the peer can reconnect too.
-        </p>
-        <p class="hint">Connected peers (audio is played automatically):</p>
-        <div id="peer-list">none</div>
-      </section>
-
-      <section class="card">
-        <h2>Telemetry</h2>
-        <table>
-          <tbody>
-            <tr><th>state</th><td id="state">-</td></tr>
-            <tr><th>peers</th><td id="peers">0</td></tr>
-            <tr><th>frames sent</th><td id="frames-sent">0</td></tr>
-            <tr><th>frames received</th><td id="frames-received">0</td></tr>
-            <tr><th>bytes sent</th><td id="bytes-sent">0</td></tr>
-            <tr><th>bytes received</th><td id="bytes-received">0</td></tr>
-            <tr><th>input level (dBFS)</th><td id="input-db">-inf</td></tr>
-            <tr><th>output level (dBFS)</th><td id="output-db">-inf</td></tr>
-          </tbody>
-        </table>
-      </section>
-
-      <section class="card">
-        <h2>Log</h2>
+      <details class="card">
+        <summary>Activity</summary>
         <div id="log" class="log"></div>
-      </section>
+      </details>
 
-      <section class="card">
-        <h2>Diagnostics</h2>
+      <details class="card">
+        <summary>Diagnostics</summary>
         <p class="hint">
-          If a device cannot connect, run this there and share the result.
-          It tests relay reachability (WebSocket and HTTPS) and the
-          discovery endpoint.
+          If a device can't connect, run this there and share the result.
         </p>
         <div class="row">
-          <button id="diag-btn" type="button" class="secondary">run network test</button>
-          <button id="diag-copy-btn" type="button" class="secondary">copy result</button>
+          <button id="diag-btn" class="ghost" type="button">run network test</button>
+          <button id="diag-copy-btn" class="ghost" type="button">copy result</button>
         </div>
         <pre id="diagnostics" class="diag">not run</pre>
-      </section>
+      </details>
     </main>
   </body>
 </html>
