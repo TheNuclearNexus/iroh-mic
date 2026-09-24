@@ -94,6 +94,7 @@ dials by endpoint id. See [iroh's docs](https://iroh.computer/docs) for relay
 deployment/self-hosting options.
 
 ## Hearing the other side
+
 Browsers only start audio after a **user gesture** on that device. On the
 receiving device:
 
