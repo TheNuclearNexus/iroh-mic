@@ -111,7 +111,8 @@ button.secondary {
   border: 1px solid var(--border);
 }
 
-input {
+input,
+select {
   flex: 1 1 24rem;
   min-width: 12rem;
   background: #0d1117;
@@ -120,6 +121,15 @@ input {
   border-radius: 6px;
   padding: 0.45rem 0.6rem;
   font-family: ui-monospace, monospace;
+}
+
+select:disabled {
+  opacity: 0.5;
+}
+
+label {
+  color: var(--muted);
+  font-size: 0.9rem;
 }
 
 code {

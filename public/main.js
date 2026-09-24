@@ -73,6 +73,7 @@ const reconnectTimers = new Map();
 const reconnectAttempts = new Map();
 let wakeLock = null;
 let playbackPromise = null;
+let outputDeviceId = "";
 
 function hexToBytes(hex) {
   if (!/^[0-9a-fA-F]+$/.test(hex) || hex.length % 2 !== 0) return new Uint8Array(0);
@@ -264,6 +265,85 @@ async function ensurePlayback() {
   return playbackPromise;
 }
 
+function outputSelectionSupported() {
+  return (
+    typeof AudioContext !== "undefined" &&
+    typeof AudioContext.prototype.setSinkId === "function"
+  );
+}
+
+async function refreshOutputDevices() {
+  const select = $("#output-device");
+  const note = $("#output-note");
+  if (!select) return;
+  if (!navigator.mediaDevices?.enumerateDevices) {
+    select.disabled = true;
+    if (note) note.textContent = "Output selection is not supported in this browser.";
+    return;
+  }
+
+  let outputs = [];
+  try {
+    outputs = (await navigator.mediaDevices.enumerateDevices()).filter(
+      (device) => device.kind === "audiooutput",
+    );
+  } catch {
+    outputs = [];
+  }
+
+  const previous = outputDeviceId;
+  select.innerHTML = "";
+  outputs.forEach((device, index) => {
+    const option = document.createElement("option");
+    option.value = device.deviceId;
+    option.textContent = device.label || `Output ${index + 1}`;
+    select.appendChild(option);
+  });
+  if (outputs.length === 0) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "System default";
+    select.appendChild(option);
+  }
+  if (previous && outputs.some((device) => device.deviceId === previous)) {
+    select.value = previous;
+  } else if (outputs.length > 0) {
+    select.value = outputs[0].deviceId;
+    outputDeviceId = outputs[0].deviceId;
+  }
+  select.disabled = !outputSelectionSupported() || outputs.length === 0;
+
+  if (note) {
+    if (!outputSelectionSupported()) {
+      note.textContent =
+        "Choosing an output device needs Chrome or Edge; Safari and Firefox do not expose it.";
+    } else if (outputs.length <= 1 && outputs.every((device) => !device.label)) {
+      note.textContent =
+        "Device names appear after you grant microphone access once (press start microphone).";
+    } else {
+      note.textContent = "";
+    }
+  }
+}
+
+async function applyOutputDevice() {
+  if (!ctx || typeof ctx.setSinkId !== "function") return false;
+  try {
+    await ctx.setSinkId(outputDeviceId || "");
+    const select = $("#output-device");
+    if (select && outputDeviceId && select.value !== outputDeviceId) {
+      select.value = outputDeviceId;
+    }
+    const label =
+      select?.selectedOptions?.[0]?.textContent || outputDeviceId || "system default";
+    log(`output device: ${label}`);
+    return true;
+  } catch (err) {
+    log(`could not set output device: ${err}`, "error");
+    return false;
+  }
+}
+
 async function setupPlayback() {
   if (!ctx) {
     ctx = new AudioContext({ sampleRate: SAMPLE_RATE });
@@ -280,6 +360,7 @@ async function setupPlayback() {
     await ctx.resume().catch(() => {});
   }
   telemetry.playback = ctx.state === "running";
+  await applyOutputDevice();
   requestWakeLock();
   updateAudioAlert();
   return telemetry.playback;
@@ -326,6 +407,7 @@ async function startCapture(mode) {
     ctx.createMediaStreamSource(stream).connect(captureNode);
     telemetry.state = "capturing (microphone)";
     log("capturing microphone input");
+    refreshOutputDevices();
   }
   updateAudioAlert();
 }
@@ -644,6 +726,13 @@ async function main() {
     navigator.clipboard?.writeText($("#diagnostics")?.textContent ?? "");
     log("diagnostics copied");
   };
+  $("#output-device").onchange = (event) => {
+    outputDeviceId = event.target.value;
+    applyOutputDevice();
+  };
+  $("#output-refresh").onclick = () => refreshOutputDevices();
+  navigator.mediaDevices?.addEventListener?.("devicechange", () => refreshOutputDevices());
+  refreshOutputDevices();
   $("#connect-form").onsubmit = (event) => {
     event.preventDefault();
     connectToPeer($("#connect-id").value);
@@ -683,6 +772,14 @@ async function main() {
     start: (mode) => startCapture(mode),
     listen: () => startListening(),
     diagnostics: () => runDiagnostics(),
+    refreshOutputDevices: () => refreshOutputDevices(),
+    setOutputDevice: (id) => {
+      outputDeviceId = id ?? "";
+      return applyOutputDevice();
+    },
+    get sinkId() {
+      return ctx?.sinkId ?? null;
+    },
     connect: (id) => connectToPeer(id),
     disconnect: () => disconnectAll(),
     resume: () => handleResume(),

@@ -94,7 +94,6 @@ dials by endpoint id. See [iroh's docs](https://iroh.computer/docs) for relay
 deployment/self-hosting options.
 
 ## Hearing the other side
-
 Browsers only start audio after a **user gesture** on that device. On the
 receiving device:
 
@@ -108,6 +107,15 @@ receiving device:
 The telemetry panel shows `output level (dBFS)`: `-inf` means nothing is being
 rendered to the audio output on this device, while a value near `-17` means
 audio is playing.
+
+### Output device
+
+The **output device** dropdown routes received audio to a specific speaker or
+headset using `AudioContext.setSinkId`. This is available in Chrome and Edge;
+Safari and Firefox do not expose it and the control is disabled there. Per
+browser privacy rules, device names only appear after microphone access has
+been granted once (press **start microphone**), so the list may show generic
+labels until then. Use **refresh** after plugging in a headset.
 
 ## Mobile and background tabs
 

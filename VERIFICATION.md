@@ -116,8 +116,16 @@ Verified: a receiver with `framesReceived=1426`, `outputDb=-inf` showed the
 `Playing muted` banner; pressing **listen** switched it to `outputDb≈-16.9`
 with the banner cleared, and tapping any button also enabled playback.
 
-## 6. Mobile resume / reconnect
+### Output device selection
 
+* In Chrome/Edge the **output device** dropdown is enabled and lists
+  `audiooutput` devices. Choosing one routes received audio there via
+  `AudioContext.setSinkId`; `window.__irohMic.sinkId` then equals the chosen
+  device id (verified with Chrome 153 fake outputs).
+* Safari and Firefox do not expose `AudioContext.prototype.setSinkId`; the
+  dropdown is disabled and a note explains why.
+
+## 6. Mobile resume / reconnect
 Mobile browsers freeze background tabs and may reload them. Verify recovery:
 
 1. Reload a connected tab. The endpoint id is unchanged and the peer connection
