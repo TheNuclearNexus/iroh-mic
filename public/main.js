@@ -314,15 +314,21 @@ async function refreshOutputDevices() {
   select.disabled = !outputSelectionSupported() || outputs.length === 0;
 
   const named = outputs.some((device) => device.label);
+  const nativePicker =
+    typeof navigator.mediaDevices.selectAudioOutput === "function";
+  const choose = $("#output-choose");
+  if (choose) {
+    choose.textContent = nativePicker ? "choose output…" : "reveal names…";
+    choose.disabled = !outputSelectionSupported();
+  }
   if (note) {
     if (!outputSelectionSupported()) {
       note.textContent =
         "Choosing an output device needs Chrome or Edge; Safari and Firefox do not expose it.";
     } else if (!named) {
-      note.textContent =
-        typeof navigator.mediaDevices.selectAudioOutput === "function"
-          ? "The browser hides output names until you pick one. Press choose… to select your speaker or headset."
-          : "The browser hides output names until you grant media access. Press choose… (or start microphone) once to reveal them.";
+      note.textContent = nativePicker
+        ? "Output names stay hidden until you pick one. Press choose output… to select your speaker or headset."
+        : "This browser won't list outputs until it has media access. Press reveal names… and allow the prompt once (it asks for a microphone, which is stopped immediately) to populate this list.";
     } else {
       note.textContent = "";
     }
@@ -355,8 +361,13 @@ async function applyOutputDevice() {
 
 /// Chrome/Edge expose a native output picker that needs no microphone access.
 async function chooseOutputDevice() {
+  if (!outputSelectionSupported()) {
+    log("this browser cannot choose an output device", "error");
+    return;
+  }
   if (!navigator.mediaDevices) return;
   if (typeof navigator.mediaDevices.selectAudioOutput === "function") {
+    log("opening the browser output picker…");
     try {
       const device = await navigator.mediaDevices.selectAudioOutput();
       outputDeviceId = device.deviceId;
@@ -368,6 +379,7 @@ async function chooseOutputDevice() {
       return;
     }
   }
+  log("this browser only reveals output names via a media permission; requesting it once…");
   await revealOutputLabels();
 }
 
@@ -564,6 +576,7 @@ async function runDiagnostics() {
     `online: ${navigator.onLine}`,
     `endpoint id: ${node ? node.endpoint_id() : "(not ready)"}`,
     `known peers: ${[...peers.keys()].join(", ") || "(none)"}`,
+    `output selection: setSinkId=${outputSelectionSupported()} picker=${typeof navigator.mediaDevices?.selectAudioOutput === "function"}`,
     "",
     "iroh relay session:",
   ];
